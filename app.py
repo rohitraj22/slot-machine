@@ -1,63 +1,67 @@
 # app.py
 import streamlit as st
 import joblib
-from game_logic import play_round  # Import our refactored game logic
+from game_logic import play_round
 
-# --- State Management with Joblib ---
-COIN_FILE = 'player_coins.joblib'
+STATE_FILE = 'game_state.joblib'
 
-def load_coins():
-    """Load coins from file, or return 100 if file doesn't exist."""
+def get_initial_state():
+    return {'coins': 100, 'high_score': 100, 'game_over': False}
+
+def load_state():
     try:
-        return joblib.load(COIN_FILE)
+        return joblib.load(STATE_FILE)
     except FileNotFoundError:
-        return 100
+        return get_initial_state()
 
-def save_coins(coins):
-    """Save coins to a file."""
-    joblib.dump(coins, COIN_FILE)
+def save_state(state):
+    joblib.dump(state, STATE_FILE)
 
-# --- UI Layout ---
-st.title("🎰 Slot Machine 🎰")
-
-# Load the current number of coins at the start of every script run
-coins = load_coins()
-
-# Display last spin result (if it exists)
+st.title("Slot Machine")
+state = load_state()
 if 'last_spin' not in st.session_state:
     st.session_state.last_spin = ["❓", "❓", "❓"]
 if 'message' not in st.session_state:
     st.session_state.message = "Place your bet to start!"
 
-# --- Main Game Interface ---
-if coins > 0:
-    st.header(f"Your Balance: {coins} 🪙")
-    
-    bet = st.number_input("Place your bet:", min_value=1, max_value=coins, step=1)
+if state['coins'] <= 0 or state['game_over']:
+    st.header("Game Over!")
 
-    if st.button("Spin!"):
-        # Call the logic function
-        new_coins, spin_result, message = play_round(bet, coins)
-        
-        # Save the new state
-        save_coins(new_coins)
-        
-        # Store results for display and rerun the script to show changes
-        st.session_state.last_spin = spin_result
-        st.session_state.message = message
+    st.metric(label="Your Final Score", value=f"{state['coins']}")
+    st.metric(label="Highest Score that could have been achieved:", value=f"{state['high_score']}")
+
+    if state['coins'] <= 0:
+        st.error("You've run out of coins!")
+    else:
+        st.success("You stopped the game. Thanks for playing!")
+
+    if st.button("Start a New Game"):
+        new_state = get_initial_state()
+        save_state(new_state)
         st.rerun()
-
 else:
-    # Game Over screen
-    st.error("💔 Game Over! You've run out of coins. 💔")
-    if st.button("Start New Game"):
-        save_coins(100) # Reset coins to 100
-        st.rerun()
+    st.header(f"Your Balance: {state['coins']}")
+    bet = st.number_input("Place your bet:", min_value=1, max_value=state['coins'], step=1)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Spin!", use_container_width=True, type="primary"):
+            new_coins, spin_result, message = play_round(bet, state['coins'])
+            state['coins'] = new_coins
+            state['high_score'] = max(state['high_score'], new_coins)
+            save_state(state)
+            st.session_state.last_spin = spin_result
+            st.session_state.message = message
+            st.rerun()
+    with col2:
+        if st.button("Stop Playing", use_container_width=True):
+            state['game_over'] = True
+            save_state(state)
+            st.rerun()
 
-# Display the reels and message
-col1, col2, col3 = st.columns(3)
-col1.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[0]}</h1>", unsafe_allow_html=True)
-col2.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[1]}</h1>", unsafe_allow_html=True)
-col3.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[2]}</h1>", unsafe_allow_html=True)
-
-st.info(st.session_state.message)
+if not state['game_over'] and state['coins'] > 0:
+    st.divider()
+    reel1, reel2, reel3 = st.columns(3)
+    reel1.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[0]}</h1>", unsafe_allow_html=True)
+    reel2.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[1]}</h1>", unsafe_allow_html=True)
+    reel3.markdown(f"<h1 style='text-align: center;'>{st.session_state.last_spin[2]}</h1>", unsafe_allow_html=True)
+    st.info(st.session_state.message)
