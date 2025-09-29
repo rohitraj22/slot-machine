@@ -1,9 +1,12 @@
+# app.py (Final Version with Acceleration Physics)
+
 import streamlit as st
 import joblib
 import time
 import random
 from game_logic import play_round, SYMBOLS
 
+# --- State Management (Unchanged) ---
 STATE_FILE = 'game_state.joblib'
 
 def get_initial_state():
@@ -25,18 +28,17 @@ st.title("🎰 Realistic Slot Machine 🎰")
 state = load_state()
 
 # --- Main Game Logic ---
-
 if state.get('game_over', False) or state['coins'] <= 0:
     # --- Game Over Screen ---
     st.header("Game Over!")
     final_coins = 0 if state['coins'] < 0 else state['coins']
-    st.metric(label="Your Final Score", value=f"{final_coins}")
-    st.metric(label="Highest Score Achieved", value=f"{state['high_score']}")
+    st.metric(label="Your Final Score", value=f"{final_coins} 🪙")
+    st.metric(label="Highest Score Achieved", value=f"{state['high_score']} 🪙")
 
     if state['coins'] <= 0:
-        st.error("You've run out of coins!")
+        st.error("💔 You've run out of coins. 💔")
     else:
-        st.success("You stopped the game. Thanks for playing!")
+        st.success("✅ You stopped the game. Thanks for playing! ✅")
 
     if st.button("Start a New Game"):
         new_state = get_initial_state()
@@ -44,7 +46,7 @@ if state.get('game_over', False) or state['coins'] <= 0:
         st.rerun()
 else:
     # --- Active Game Interface ---
-    st.header(f"Your Balance: {state['coins']}")
+    st.header(f"Your Balance: {state['coins']} 🪙")
     bet = st.number_input("Place your bet:", min_value=1, max_value=state['coins'], step=1)
 
     reel_placeholders = st.columns(3)
@@ -60,62 +62,71 @@ else:
     spin_col, stop_col = st.columns(2)
 
     if spin_col.button("Spin!", use_container_width=True, type="primary"):
-       
+        # --- NEW PHYSICS-BASED ANIMATION ---
+
+        # 1. Determine final result before animation
         new_coins, final_spin, message = play_round(bet, state['coins'])
 
+        # 2. Create reel strips and initialize indices
         reel_strips = [random.sample(SYMBOLS * 10, len(SYMBOLS * 10)) for _ in range(3)]
+        current_indices = [random.randint(0, 9) for _ in range(3)]
 
-        BLUR_SPEED = 0.02   # Time between frames during blur
-        SLOWDOWN_SPEED = 0.1 # Time between frames during slowdown
-        REEL_STOP_PAUSE = 0.3 # Pause after a reel stops
+        # 3. Define animation phases and parameters
+        PHASES = {
+            'ACCELERATE': {'duration': 5, 'start_speed': 0.1, 'end_speed': 0.02},
+            'BLUR': {'duration': 15, 'speed': 0.01},
+            'DECELERATE': {'duration': 5, 'start_speed': 0.02, 'end_speed': 0.1},
+            'STOP_PAUSE': 0.3
+        }
         
-        TOTAL_DURATION = 50 # Total animation frames
-        REEL_1_SLOWDOWN = 15 # Frame when reel 1 starts to slow down
-        REEL_1_STOP = 20     # Frame when reel 1 stops
-        REEL_2_SLOWDOWN = 30
-        REEL_2_STOP = 35
-        REEL_3_SLOWDOWN = 45
-        REEL_3_STOP = 50
+        # Calculate when each reel stops
+        reel_stop_frames = [
+            PHASES['ACCELERATE']['duration'] + PHASES['BLUR']['duration'] + PHASES['DECELERATE']['duration'],
+            PHASES['ACCELERATE']['duration'] + PHASES['BLUR']['duration'] * 2 + PHASES['DECELERATE']['duration'],
+            PHASES['ACCELERATE']['duration'] + PHASES['BLUR']['duration'] * 3 + PHASES['DECELERATE']['duration']
+        ]
         
-        start_indices = [random.randint(0, len(s) - 1) for s in reel_strips]
-        
-        for i in range(1, TOTAL_DURATION + 1):
-            spin_display = ["", "", ""]
-            current_sleep_time = BLUR_SPEED
+        total_frames = max(reel_stop_frames)
 
-            if i < REEL_1_STOP:
-                idx = (start_indices[0] + i) % len(reel_strips[0])
-                spin_display[0] = reel_strips[0][idx]
-                if i > REEL_1_SLOWDOWN:
-                    current_sleep_time = SLOWDOWN_SPEED # Slow down
-            else:
-                spin_display[0] = final_spin[0]
+        for i in range(1, total_frames + 1):
+            spin_display = list(last_spin) # Start with last known symbols
+            
+            min_sleep = 0.2 # Determine sleep time by the slowest reel
 
-            if i < REEL_2_STOP:
-                idx = (start_indices[1] + i * 2) % len(reel_strips[1]) # Spin faster
-                spin_display[1] = reel_strips[1][idx]
-                if i > REEL_2_SLOWDOWN:
-                    current_sleep_time = SLOWDOWN_SPEED
-            else:
-                spin_display[1] = final_spin[1]
+            for r in range(3): # For each of the 3 reels
+                if i >= reel_stop_frames[r]:
+                    spin_display[r] = final_spin[r]
+                    continue
 
-            if i < REEL_3_STOP:
-                idx = (start_indices[2] + i * 3) % len(reel_strips[2]) # Spin fastest
-                spin_display[2] = reel_strips[2][idx]
-                if i > REEL_3_SLOWDOWN:
-                    current_sleep_time = SLOWDOWN_SPEED
-            else:
-                spin_display[2] = final_spin[2]
+                # --- Calculate current speed and position for this reel ---
+                accel_duration = PHASES['ACCELERATE']['duration']
+                decel_start_frame = reel_stop_frames[r] - PHASES['DECELERATE']['duration']
 
-            # Update UI
+                if i < accel_duration: # Accelerating
+                    progress = i / accel_duration
+                    speed = PHASES['ACCELERATE']['start_speed'] - (progress * (0.08))
+                    increment = int(1 + progress * 4)
+                elif i >= decel_start_frame: # Decelerating
+                    progress = (i - decel_start_frame) / PHASES['DECELERATE']['duration']
+                    speed = PHASES['DECELERATE']['start_speed'] + (progress * (0.08))
+                    increment = int(5 - progress * 4)
+                else: # Blur
+                    speed = PHASES['BLUR']['speed']
+                    increment = 5
+
+                current_indices[r] = (current_indices[r] + increment) % len(reel_strips[r])
+                spin_display[r] = reel_strips[r][current_indices[r]]
+                min_sleep = min(min_sleep, speed)
+
+            # Update UI with the calculated frame
             for j, reel in enumerate(reel_placeholders):
                 reel.markdown(f"<h1 style='text-align: center; font-size: 80px;'>{spin_display[j]}</h1>", unsafe_allow_html=True)
-
-            # Pause when a reel stops to create impact
-            if i == REEL_1_STOP or i == REEL_2_STOP:
-                time.sleep(REEL_STOP_PAUSE)
+            
+            # Pause dramatically when a reel locks in place
+            if i in reel_stop_frames:
+                time.sleep(PHASES['STOP_PAUSE'])
             else:
-                time.sleep(current_sleep_time)
+                time.sleep(min_sleep)
 
         # Finalize state
         st.session_state.last_message = message
