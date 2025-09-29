@@ -4,7 +4,6 @@ import time
 import random
 from game_logic import play_round, SYMBOLS
 
-# --- State Management (Unchanged) ---
 STATE_FILE = 'game_state.joblib'
 
 def get_initial_state():
@@ -19,40 +18,42 @@ def load_state():
 def save_state(state):
     joblib.dump(state, STATE_FILE)
 
-# --- UI Layout ---
-st.set_page_config(page_title="Spinning Slots", page_icon="🎰")
-st.title("🎰 Realistic Slot Machine 🎰")
+#UI Layout
+st.set_page_config(page_title="Slot Machine", page_icon="🎰")
+st.title("🎰 Slot Machine 🎰")
 
 state = load_state()
 
-# --- Main Game Logic ---
+#Main Game Logic
 if state.get('game_over', False) or state['coins'] <= 0:
-    # --- Game Over Screen ---
+    #Game Over Screen
     st.header("Game Over!")
     final_coins = 0 if state['coins'] < 0 else state['coins']
-    st.metric(label="Your Final Score", value=f"{final_coins} 🪙")
-    st.metric(label="Highest Score Achieved", value=f"{state['high_score']} 🪙")
+    st.metric(label="Your Final Score", value=f"{final_coins}")
+    st.metric(label="You could have got", value=f"{state['high_score']}")
 
     if state['coins'] <= 0:
-        st.error("💔 You've run out of coins. 💔")
+        st.error("You've run out of coins.")
     else:
-        st.success("✅ You stopped the game. Thanks for playing! ✅")
+        if state['coins'] == state['high_score'] and state['high_score'] > 100:
+            st.balloons()
+            st.success("Perfect Timing! You stopped at your absolute peak. Well played!")
+        else:
+            st.success("You stopped the game. Thanks for playing!")
 
     if st.button("Start a New Game"):
         new_state = get_initial_state()
         save_state(new_state)
         st.rerun()
 else:
-    # --- Active Game Interface ---
-    st.header(f"Your Balance: {state['coins']} 🪙")
+    #Active game interface
+    st.header(f"Your Balance: {state['coins']}")
     bet = st.number_input("Place your bet:", min_value=1, max_value=state['coins'], step=1)
 
-    # **THE FIX: Create columns for layout, then put an st.empty() placeholder inside each one.**
     col1, col2, col3 = st.columns(3)
     placeholders = [col1.empty(), col2.empty(), col3.empty()]
     message_placeholder = st.empty()
 
-    # Display the initial state in the placeholders
     last_spin = st.session_state.get('last_spin', ["❓", "❓", "❓"])
     last_message = st.session_state.get('last_message', "Place your bet and click 'Spin'!")
     for i, placeholder in enumerate(placeholders):
@@ -62,16 +63,12 @@ else:
     spin_col, stop_col = st.columns(2)
 
     if spin_col.button("Spin!", use_container_width=True, type="primary"):
-        # --- Physics-Based Animation (Now correctly rendered) ---
 
-        # 1. Determine final result
         new_coins, final_spin, message = play_round(bet, state['coins'])
 
-        # 2. Setup reel strips and indices
         reel_strips = [random.sample(SYMBOLS * 10, len(SYMBOLS * 10)) for _ in range(3)]
         current_indices = [random.randint(0, 9) for _ in range(3)]
-
-        # 3. Define animation parameters
+        
         PHASES = {
             'ACCELERATE': {'duration': 5, 'start_speed': 0.1, 'end_speed': 0.02},
             'BLUR': {'duration': 15, 'speed': 0.01},
@@ -114,7 +111,6 @@ else:
                 spin_display[r] = reel_strips[r][current_indices[r]]
                 min_sleep = min(min_sleep, speed)
 
-            # **THE FIX: Update the content of the st.empty() placeholders, which replaces the old content.**
             for j, placeholder in enumerate(placeholders):
                 placeholder.markdown(f"<h1 style='text-align: center; font-size: 80px;'>{spin_display[j]}</h1>", unsafe_allow_html=True)
             
@@ -123,7 +119,6 @@ else:
             else:
                 time.sleep(min_sleep)
 
-        # Finalize state
         st.session_state.last_message = message
         st.session_state.last_spin = final_spin
         state['coins'] = new_coins
