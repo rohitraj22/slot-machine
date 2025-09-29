@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import joblib
 from game_logic import play_round
