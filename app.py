@@ -27,7 +27,7 @@ if state['coins'] <= 0 or state['game_over']:
     st.header("Game Over!")
 
     st.metric(label="Your Final Score", value=f"{state['coins']}")
-    st.metric(label="Highest Score that could have been achieved:", value=f"{state['high_score']}")
+    st.metric(label="You could have got", value=f"{state['high_score']}")
 
     if state['coins'] <= 0:
         st.error("You've run out of coins!")
