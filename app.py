@@ -18,7 +18,7 @@ def save_coins(coins):
     joblib.dump(coins, COIN_FILE)
 
 # --- UI Layout ---
-st.title("🎰 Slot Machine (Joblib Version) 🎰")
+st.title("🎰 Slot Machine 🎰")
 
 # Load the current number of coins at the start of every script run
 coins = load_coins()
